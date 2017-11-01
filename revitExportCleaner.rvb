@@ -1,0 +1,123 @@
+﻿Option Explicit
+'Script written by Andrew Swartzell | aswartzell.net
+'Script dated Wednesday, September 28, 2011 4:06:50 PM
+
+'---------------------------------------------------------------------------------
+' In order to simplify geometry exported from Revit, this script will explode 
+' all blocks and delete all curves in the model.
+'
+' Export from Revit to DWG: 
+'  - Export all properties BYLAYER, and create new layers for overrides
+'  - Load settings from a blank text file to map all categories to their own layer
+'  - Best to export solids as polymesh
+'---------------------------------------------------------------------------------
+
+Call Main()
+
+Sub Main()
+		
+	Dim layer
+	
+	Call rhino.addlayer("Default")
+	Call rhino.currentlayer("Default")
+	
+	'delete all curves and explode all blocks
+	Call rhino.EnableRedraw(False)
+	Do  
+		Call DeleteCurves()
+	Loop While ExplodeBlocks()
+	Call rhino.EnableRedraw(True)
+	
+	'turn off all layers
+	Call rhino.EnableRedraw(False)
+	For Each layer In rhino.LayerNames()
+		Call rhino.LayerVisible(layer, False)
+	Next
+	Call rhino.EnableRedraw(True)
+	
+	'merge meshes by layer
+	For Each layer In rhino.LayerNames()
+		If HasMeshes(layer) Then
+			Call MergeLayer(layer)
+		Else
+			call rhino.LayerVisible(layer, true)
+		End If
+	Next
+
+	'unlock all layers
+	Call rhino.EnableRedraw(False)
+	For Each layer In rhino.LayerNames()
+		Call rhino.LayerLocked(layer, False)
+	Next
+	Call rhino.EnableRedraw(True)
+	
+End Sub
+
+Function HasMeshes(layer)
+	
+	HasMeshes = False
+	
+	Dim objs : objs = rhino.ObjectsByLayer(layer)
+	If isnull(objs) Then Exit Function
+	
+	HasMeshes = True
+	
+	Dim obj
+	For Each obj In objs
+		If rhino.IsMesh(obj) Then Exit Function
+	Next
+	
+	HasMeshes = False
+	
+End Function
+
+Sub MergeLayer(layer)
+	
+	Dim objs, continue
+	
+	Call rhino.LayerVisible(layer, True)
+	Call rhino.LayerLocked(layer, False)
+	
+	objs = rhino.ObjectsByLayer(layer, True)
+	If isnull(objs) Then Exit Sub
+	
+	Call rhino.Command("_Join _SelAll _Enter")
+	Call rhino.UnselectAllObjects()
+	
+	Call rhino.LayerLocked(layer, True)
+	
+End Sub
+
+Function DeleteCurves()
+	
+	Dim objs
+	
+	objs = rhino.objectsbytype(4)
+	If Not isnull(objs) Then
+		Call rhino.Prompt("Deleting curves")
+		Call rhino.DeleteObjects(objs)
+		DeleteCurves = True
+	Else
+		DeleteCurves = False
+	End If
+	
+End Function
+
+Function ExplodeBlocks()
+	
+	Dim objs, count, obj
+	
+	objs = rhino.objectsbytype(4096)
+	If Not isnull(objs) Then
+		count = 1
+		For Each obj In objs
+			Call rhino.Prompt("Exploding block " & count & " of " & ubound(objs) + 1)
+			Call rhino.ExplodeBlockInstance(obj)
+			count = count + 1
+		Next
+		ExplodeBlocks = True
+	Else
+		ExplodeBlocks = False
+	End If
+	
+End Function
