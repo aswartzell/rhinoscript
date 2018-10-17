@@ -1,4 +1,4 @@
-﻿Option Explicit
+Option Explicit
 'Script written by Andrew Swartzell | aswartzell.net
 'Script dated Wednesday, September 28, 2011 4:06:50 PM
 
@@ -16,10 +16,11 @@ Call Main()
 
 Sub Main()
 		
-	Dim layer
+	Dim name : name = rhino.stringbox("Enter scheme name")
 	
-	Call rhino.addlayer("Default")
-	Call rhino.currentlayer("Default")
+	Dim layer
+	Call rhino.addlayer(name)
+	Call rhino.currentlayer(name)
 	
 	'delete all curves and explode all blocks
 	Call rhino.EnableRedraw(False)
@@ -40,7 +41,7 @@ Sub Main()
 		If HasMeshes(layer) Then
 			Call MergeLayer(layer)
 		Else
-			call rhino.LayerVisible(layer, true)
+			Call rhino.LayerVisible(layer, True)
 		End If
 	Next
 
@@ -50,6 +51,17 @@ Sub Main()
 		Call rhino.LayerLocked(layer, False)
 	Next
 	Call rhino.EnableRedraw(True)
+	
+	'nest layers under parent
+	Call rhino.EnableRedraw(False)
+	For Each layer In rhino.layernames()
+		If isnull(rhino.ParentLayer(layer)) then
+			Call rhino.parentlayer(layer, name)
+		End If
+	Next
+	Call rhino.EnableRedraw(True)
+	
+	Call LayerColors()
 	
 End Sub
 
@@ -121,3 +133,28 @@ Function ExplodeBlocks()
 	End If
 	
 End Function
+
+Sub LayerColors()
+
+	Dim layer
+	For Each layer In rhino.LayerNames()
+		
+		Dim clr : clr = rhino.LayerColor(layer)
+		
+		If clr > 0 Then
+				
+			Dim matID
+			If rhino.LayerMaterialIndex(layer) = -1 Then				
+				matID = rhino.AddMaterialToLayer(layer)
+				Call rhino.MaterialName(matID, clr)
+			Else
+				matID = rhino.LayerMaterialIndex(layer)
+			End If
+		
+			Call rhino.MaterialColor(matID, clr)
+			
+		End If
+		
+	Next
+	
+End Sub
