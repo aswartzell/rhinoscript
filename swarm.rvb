@@ -1,6 +1,5 @@
 Option Explicit
-'Script written by <insert name>
-'Script copyrighted by <insert company name>
+'Script written by Andrew Swartzell, based on an example by Roland Snooks
 'Script version Thursday, February 21, 2019 3:07:09 PM
 
 Call Main()
