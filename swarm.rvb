@@ -1,0 +1,170 @@
+Option Explicit
+'Script written by <insert name>
+'Script copyrighted by <insert company name>
+'Script version Thursday, February 21, 2019 3:07:09 PM
+
+Call Main()
+Sub Main()
+
+	Dim arrCrvs : arrCrvs = rhino.GetObjects("Select starting lines", 4)
+	
+	Dim i
+	For i = 0 To ubound(arrCrvs)
+		Dim location : location = rhino.CurveStartPoint(arrCrvs(i))
+		Dim velocity : velocity = rhino.VectorCreate(rhino.CurveStartPoint(arrCrvs(i)), rhino.CurveEndPoint(arrCrvs(i)))
+		Dim maxVel : maxVel = 10
+		Dim maxForce : maxForce = .1
+		Dim rangeOfVis : rangeOfVis = 15
+		ReDim Preserve arrAgents(i)
+		arrAgents(i) = array(location, velocity, maxVel, maxForce, rangeOfVis)
+	Next
+
+	Do
+		Dim swarm : swarm = rhino.AddPointCloud(SwarmPoints(arrAgents))
+		Call rhino.EnableRedraw(False)
+	
+		'get location and parameters of other agents before looping
+		Dim arrOthers : arrOthers = arrAgents
+			
+		For i = 0 To ubound(arrAgents)
+			
+			Dim agent : agent = arrAgents(i)
+			
+			location = agent(0)
+			velocity = agent(1)
+			maxVel = agent(2)
+			maxForce = agent(3)
+			rangeOfVis = agent(4)
+			
+			'reset acceleration
+			Dim acceleration : acceleration = Array(0, 0, 0)
+			
+			'call behaviors - separation, align, cohesion
+			Dim alignment : alignment = GetAlignment(agent, arrOthers, rangeOfVis)
+			Dim cohesion : cohesion = GetCohesion(agent, arrOthers, rangeOfVis)
+			Dim separation : separation = GetSeparation(agent, arrOthers, rangeOfVis * .5)
+			
+			'weight behaviors
+			alignment = Rhino.VectorScale(alignment, 2)
+			cohesion = Rhino.VectorScale(cohesion, 2)
+			separation = Rhino.VectorScale(separation, 2)
+	
+			'calculate new speed, direction, and position
+			acceleration = Rhino.VectorAdd(acceleration, alignment)
+			acceleration = Rhino.VectorAdd(acceleration, cohesion)
+			acceleration = Rhino.VectorAdd(acceleration, separation)
+			velocity = Rhino.VectorAdd(velocity, acceleration)
+			velocity = VectorLimit(velocity, maxVel)
+			location = Rhino.VectorAdd(location, velocity)
+			
+			Call rhino.AddLine(agent(0), location)
+			
+			'update information in array
+			arrAgents(i) = array(location, velocity, maxVel, maxForce, rangeOfVis)
+			
+		Next
+		Call rhino.deleteobject(swarm)
+		Call rhino.EnableRedraw(True)
+	Loop
+	
+End Sub
+
+Function SwarmPoints(arrAgents)
+	
+	Dim i
+	For i = 0 To ubound(arrAgents)
+		ReDim Preserve arrPts(i)
+		arrPts(i) = arrAgents(i)(0)
+	Next
+	
+	SwarmPoints = arrPts
+	
+End Function
+
+Function VectorLimit(vec, limit)
+	If Rhino.VectorLength(vec) > limit Then
+		vec = Rhino.VectorScale(Rhino.VectorUnitize(vec), limit)		
+	End If
+	vectorLimit = vec
+End Function
+
+Function GetAlignment(agent, arrAgents, rangeOfVis)
+	
+	Dim dist, sumVec, count, i
+	
+	sumVec = Array(0, 0, 0)
+	count = 0
+	
+	For i = 0 To UBound(arrAgents)
+		dist = Rhino.Distance(agent(0), arrAgents(i)(0))
+		If dist < rangeOfVis And dist > 0 Then
+			sumVec = Rhino.VectorAdd(sumVec, arrAgents(i)(1))
+			count = count + 1
+		End If
+	Next
+	
+	If count > 0 Then
+		sumVec = Rhino.VectorDivide(sumVec, count)
+		sumVec = Rhino.VectorScale(sumVec, agent(3))
+	End If
+	
+	' return a vector
+	GetAlignment = sumVec
+	
+End Function
+
+Function GetCohesion(agent, arrAgents, rangeOfVis)
+
+	Dim dist, sumPos, count, i
+	sumPos = Array(0, 0, 0)
+	count = 0
+	
+	For i = 0 To UBound(arrAgents)
+		dist = Rhino.Distance(agent(0), arrAgents(i)(0))
+		If dist < rangeOfVis And dist > 0 Then
+			sumPos = Rhino.VectorAdd(sumPos, arrAgents(i)(0))
+			count = count + 1
+		End If
+	Next
+	
+	If count > 0 Then
+		sumPos = Rhino.VectorDivide(sumPos, count)
+		sumPos = Rhino.VectorCreate(sumPos, agent(0))
+		sumPos = vectorLimit(sumPos, agent(2))
+		sumPos = Rhino.VectorScale(sumPos, agent(3))
+	End If
+	
+	' return a vector
+	GetCohesion = sumPos
+	
+End Function
+
+Function GetSeparation(agent, arrAgents, rangeOfVis)
+	
+	Dim sumVec, count, i, dist, vec
+	
+	sumVec = Array(0, 0, 0)
+	count = 0
+	
+	'loop through agents
+	For i = 0 To UBound(arrAgents)
+		'check distance
+		dist = Rhino.Distance(agent(0), arrAgents(i)(0))
+		If dist < rangeOfVis And dist > 0 Then
+			'create vector between other agent
+			vec = Rhino.VectorCreate(agent(0), arrAgents(i)(0))
+			'scale by 1/dist
+			vec = Rhino.VectorScale(vec, 1 / dist)
+			sumVec = Rhino.VectorAdd(sumVec, vec)
+		End If
+	Next
+	'divide sum by count
+	If count > 0 Then
+		sumVec = Rhino.VectorDivide(sumVec, count)
+		sumVec = VectorLimit(sumVec, agent(2))
+		sumVec = Rhino.VectorScale(sumVec, agent(3))
+	End If
+	'return sum
+	GetSeparation = sumVec
+	
+End Function
